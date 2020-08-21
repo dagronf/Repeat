@@ -56,6 +56,34 @@ class RepeatTests: XCTestCase {
 		self.wait(for: [exp], timeout: 1)
 	}
 
+	func test_throttle_with_userinfo() {
+		let exp = expectation(description: "Run once and call immediately")
+
+		var value = 0
+		var receivedUserInfo = -1
+		let throttle = Throttler(timeWithUserInfo: .milliseconds(500)) { userInfo in
+			value += 1
+			receivedUserInfo = userInfo as! Int
+		}
+
+		throttle.call(userInfo: 1)
+		throttle.call(userInfo: 2)
+		throttle.call(userInfo: 3)
+		throttle.call(userInfo: 4)
+		throttle.call(userInfo: 5)
+
+		DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
+			if value == 1, receivedUserInfo == 5 {
+				exp.fulfill()
+			} else {
+				XCTFail("Failed to throttle, calls were not ignored.")
+			}
+		}
+
+		self.wait(for: [exp], timeout: 1)
+	}
+
+
 	func test_debounce_callWithoutCallback() {
 
 		let testDebouncer = Debouncer(.seconds(0))

@@ -34,6 +34,9 @@ open class Throttler {
 	/// Callback type
 	public typealias Callback = (() -> Void)
 
+	/// Callback type
+	public typealias CallbackUserInfo = ((Any) -> Void)
+
 	/// Behaviour mode of the throttler.
 	///
 	/// - fixed: When execution is available, dispatcher will try to keep fire on a fixed rate.
@@ -54,6 +57,9 @@ open class Throttler {
 
 	/// Callback to call
 	private var callback: Callback?
+
+	/// Callback to call including userInfo
+	private var callbackWithUserInfo: CallbackUserInfo?
 
 	/// Last scheduled callback job
 	private var callbackJob = DispatchWorkItem(block: {})
@@ -86,7 +92,15 @@ open class Throttler {
 		self.callback = callback
 	}
 
-	/// Execute callback in throotle mode.
+	public init(timeWithUserInfo time: Repeater.Interval, queue: DispatchQueue? = nil, mode: Mode = .fixed, immediateFire: Bool = false, _ callback: CallbackUserInfo? = nil) {
+		self.throttle = time.value
+		self.queue = (queue ?? DispatchQueue.global(qos: .background))
+		self.mode = mode
+		self.immediateFire = immediateFire
+		self.callbackWithUserInfo = callback
+	}
+
+	/// Execute callback in throttle mode.
 	public func call() {
 		callbackJob.cancel()
 		callbackJob = DispatchWorkItem { [weak self] in
@@ -95,6 +109,24 @@ open class Throttler {
 				selfStrong.waitingForPerform = false
 			}
 			self?.callback?()
+		}
+
+		let (now, dispatchTime) = self.evaluateDispatchTime()
+		self.previousScheduled = now
+		self.waitingForPerform = true
+
+		queue.asyncAfter(deadline: dispatchTime, execute: callbackJob)
+	}
+
+	/// Execute callback in throttle mode.
+	public func call(userInfo: Any) {
+		callbackJob.cancel()
+		callbackJob = DispatchWorkItem { [weak self] in
+			if let selfStrong = self {
+				selfStrong.lastExecutionTime = .now()
+				selfStrong.waitingForPerform = false
+			}
+			self?.callbackWithUserInfo?(userInfo)
 		}
 
 		let (now, dispatchTime) = self.evaluateDispatchTime()
